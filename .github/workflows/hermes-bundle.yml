@@ -1,0 +1,58 @@
+name: Publish pre-installed Hermes runtime (pinned)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/hermes-bundle.yml"
+      - "scripts/hermes_runtime.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hermes-runtime-ubuntu2404-x64-pinned
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build Hermes once and publish runtime to this repo Releases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout trusted bundle builder
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Hermes with no external API credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/hermes_runtime.sh install
+
+      - name: Package installed executable and Python runtime with SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/hermes_runtime.sh bundle
+
+      - name: Publish versioned and immutable repository Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="hermes-runtime-v0.23.0-ubuntu2404-x64-2bd378ed1b8d"
+          ARCHIVE="hermes-ubuntu2404-x64-2bd378ed1b8d.tar.zst"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Pinned release already exists, not overwriting."
+          else
+            gh release create "$TAG" "dist/$ARCHIVE" "dist/$ARCHIVE.sha256" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Pinned Hermes Agent v0.23.0 · Ubuntu 24.04 x86-64" \
+              --notes "Clean pre-installed runtime built from NousResearch/hermes-agent commit 2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19. Contains Hermes executable and Python dependencies, not Gemma model weights or credentials. Use scripts/hermes_runtime.sh restore. SHA-256 sidecar included." \
+              --latest=false
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY"

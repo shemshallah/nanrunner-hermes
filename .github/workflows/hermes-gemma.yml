@@ -9,6 +9,7 @@ on:
       - "scripts/ollama_gemma_smoke.py"
       - ".github/workflows/hermes-gemma.yml"
       - "README.md"
+      - "scripts/hermes_runtime.sh"
   workflow_dispatch:
 
 permissions:
@@ -21,7 +22,7 @@ concurrency:
 jobs:
   nanrunner-hermes:
     name: nanrunner-hermes (isolated Ubuntu)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout this dedicated runner (no retained Git credentials)
@@ -59,13 +60,29 @@ jobs:
           python -m unittest discover -s tests -p 'test_nannet_device_client.py' -v
           python -m unittest discover -s tests -p 'test_plugin_manifest.py' -v
 
-      - name: Install pinned Hermes Agent (real host runtime)
+      - name: Restore installed Hermes from repository Actions cache
+        id: hermes-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.hermes
+            ~/.local/bin/hermes
+          key: hermes-ubuntu2404-x64-2bd378ed1b8d-bundle-v1
+
+      - name: Restore repository Release runtime or pinned bootstrap
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/v0.23.0/scripts/install.sh -o /tmp/hermes-agent-install.sh
-          bash /tmp/hermes-agent-install.sh --commit 2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19 --channel main --non-interactive --skip-browser --skip-computer-use
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          bash scripts/hermes_runtime.sh restore
+
+      - name: Save Hermes cache before any Ollama secrets are injected
+        if: steps.hermes-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.hermes
+            ~/.local/bin/hermes
+          key: hermes-ubuntu2404-x64-2bd378ed1b8d-bundle-v1
 
       - name: Verify Hermes Agent plugin installation contract
         shell: bash
@@ -90,7 +107,7 @@ jobs:
       (github.event_name == 'push' &&
        github.event.head_commit.message == 'Run one-time Ollama secret integration test')
     needs: nanrunner-hermes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout dedicated test harness without retained Git credentials
@@ -103,13 +120,29 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pinned Hermes Agent, without any provider secret
+      - name: Restore installed Hermes from repository Actions cache
+        id: hermes-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.hermes
+            ~/.local/bin/hermes
+          key: hermes-ubuntu2404-x64-2bd378ed1b8d-bundle-v1
+
+      - name: Restore repository Release runtime or pinned bootstrap
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/v0.23.0/scripts/install.sh -o /tmp/hermes-agent-install.sh
-          bash /tmp/hermes-agent-install.sh --commit 2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19 --channel main --non-interactive --skip-browser --skip-computer-use
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          bash scripts/hermes_runtime.sh restore
+
+      - name: Save Hermes cache before any Ollama secrets are injected
+        if: steps.hermes-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.hermes
+            ~/.local/bin/hermes
+          key: hermes-ubuntu2404-x64-2bd378ed1b8d-bundle-v1
 
       - name: Verify one Ollama Gemma completion and one Hermes one-shot
         shell: bash
