@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - "scripts/ollama_gemma_smoke.py"
+      - "scripts/hermes_gemma_session.py"
+      - "tests/test_hermes_gemma_session.py"
       - ".github/workflows/hermes-gemma.yml"
       - "README.md"
       - "scripts/hermes_runtime.sh"
@@ -49,6 +51,12 @@ jobs:
           set -euo pipefail
           python -m pip install -e "./plugin-src[auth]"
           python -m pip check
+
+      - name: Test Gemma session bridge offline (no API credential)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_hermes_gemma_session.py' -v
 
       - name: Exercise local HERMES login and hardware-node tests (mock network)
         shell: bash
@@ -99,13 +107,13 @@ jobs:
           echo "This job never receives the Ollama secret." >> "$GITHUB_STEP_SUMMARY"
 
   cloud-smoke:
-    name: Gemma cloud + Hermes one-shot (separate ephemeral runner)
+    name: Gemma cloud + resumed Hermes chat (isolated runner)
     # A single authorized push with the exact commit message below runs this
     # one-time test; normal push CI and PRs NEVER read any cloud credential.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' &&
-       github.event.head_commit.message == 'Run one-time Ollama secret integration test')
+       github.event.head_commit.message == 'Verify Hermes Gemma session roundtrip')
     needs: nanrunner-hermes
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -144,7 +152,7 @@ jobs:
             ~/.local/bin/hermes
           key: hermes-ubuntu2404-x64-2bd378ed1b8d-bundle-v1
 
-      - name: Verify one Ollama Gemma completion and one Hermes one-shot
+      - name: Verify authenticated Ollama Gemma API and resumed Hermes conversation
         shell: bash
         env:
           OLLAMA: ${{ secrets.OLLAMA }}
@@ -156,20 +164,7 @@ jobs:
             echo "ERROR: Actions repository secret OLLAMA is unavailable" >&2
             exit 2
           fi
-          # The direct smoke script suppresses provider error bodies and output.
           python scripts/ollama_gemma_smoke.py
-          # Actual Hermes Agent inference. Do not print its output, diagnostics,
-          # or credentials into hosted runner logs.
-          if timeout 180s hermes chat --oneshot --provider ollama-cloud --model gemma4:31b --safe-mode --max-turns 1 -q "Reply with exactly READY." >/tmp/hermes.out 2>/tmp/hermes.err; then
-            if [[ ! -s /tmp/hermes.out ]]; then
-              echo "ERROR: Hermes returned no visible response" >&2
-              exit 1
-            fi
-            echo "PASS: Hermes Agent one-shot completed via Ollama Cloud"
-            echo "### Hermes Agent via Ollama Cloud: PASS" >> "$GITHUB_STEP_SUMMARY"
-          else
-            rc=$?
-            echo "ERROR: Hermes one-shot failed (exit $rc); output withheld to avoid leaks" >&2
-            exit 1
-          fi
-          echo "The two bounded inferences do not prove zero-cost usage; inspect Ollama billing." >> "$GITHUB_STEP_SUMMARY"
+          python scripts/hermes_gemma_session.py
+          echo "Direct API and resumed Hermes/Gemma session verified." >> "$GITHUB_STEP_SUMMARY"
+          echo "Model requests may consume account credits." >> "$GITHUB_STEP_SUMMARY"
