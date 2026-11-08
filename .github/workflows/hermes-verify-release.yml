@@ -1,0 +1,38 @@
+name: Verify pre-installed Hermes Release on a fresh runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/hermes-verify-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    name: Clean Ubuntu restore (no cache and no provider secrets)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout pinned bundle restore script
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download Release, check SHA-256 and launch preinstalled Hermes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e "$HOME/.hermes/.nanrunner-hermes-runtime-pin"
+          begin="$(date +%s)"
+          bash scripts/hermes_runtime.sh restore
+          duration="$(( $(date +%s) - begin ))"
+          test -x "$HOME/.local/bin/hermes"
+          hermes --help >/dev/null
+          hermes plugins --help >/dev/null
+          echo "PASS: clean runner restored and ran Hermes Release in $duration seconds"
+          echo "### Fresh runner Hermes restore: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Release SHA-256 verified; pinned executable and plugin CLI start correctly." >> "$GITHUB_STEP_SUMMARY"
+          echo "Restore duration: $duration seconds (uncached)." >> "$GITHUB_STEP_SUMMARY"
