@@ -2,7 +2,7 @@
 
 Dedicated, disposable **GitHub Actions** runner for the NaNLMind HERMES plugin.
 
-- The job runs only on manual **Actions → Test HERMES + Gemma (Ollama) → Run workflow**.
+- Every commit runs a **credential-free** Linux Hermes/plugin admission check. The **only step that reads the Ollama key** runs when manually selected under **Actions → Test HERMES + Gemma (Ollama) → Run workflow**.
 - The only external model credential is the repository's **Actions secret named `OLLAMA`**. Do **not** paste its value into any source file, YAML, README, commit, issue, or log.
 - The job does not require Koyeb, NANNET administrative tokens, other GitHub repository secrets, or a privileged PAT.
 - It checks out the HERMES plugin from a **specific commit** in `shemshallah/NaNLMind_HERMES`, installs a pinned Hermes Agent version, validates the plugin, and makes **one bounded authenticated Gemma cloud call** with Ollama.
@@ -16,7 +16,7 @@ Dedicated, disposable **GitHub Actions** runner for the NaNLMind HERMES plugin.
 2. Set the **Name** to `OLLAMA` and paste your Ollama API key only into the **Secret** field. Save.
 3. Open [Actions](https://github.com/shemshallah/nanrunner-hermes/actions), select **Test HERMES + Gemma (Ollama)** and choose **Run workflow**.
 
-The workflow deliberately fails before any cloud request if the secret is missing.
+A manually triggered cloud test fails before sending a request if the secret is missing. The ordinary push test does not load the secret at all.
 
 ## Boundaries
 
