@@ -1,0 +1,94 @@
+name: Test HERMES + Gemma (Ollama)
+
+# Runs Linux install/validation on setup changes. The Ollama API secret is
+# provided ONLY to the explicitly requested manual smoke-test step.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/ollama_gemma_smoke.py"
+      - ".github/workflows/hermes-gemma.yml"
+      - "README.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nanrunner-hermes-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nanrunner-hermes:
+    name: nanrunner-hermes (isolated Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout this dedicated runner (no retained Git credentials)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned NaNLMind HERMES plugin source (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: shemshallah/NaNLMind_HERMES
+          ref: f9c173232f0be87806e0b26bac0e5db08ce36a0d
+          path: plugin-src
+          persist-credentials: false
+
+      - name: Set up Linux Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HERMES plugin dependencies without any cloud token
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -e "./plugin-src[auth]"
+          python -m pip check
+
+      - name: Exercise local HERMES login and hardware-node tests (mock network)
+        shell: bash
+        working-directory: plugin-src
+        env:
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_nannet_device_client.py' -v
+          python -m unittest discover -s tests -p 'test_plugin_manifest.py' -v
+
+      - name: Install pinned Hermes Agent (real host runtime)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/v0.23.0/scripts/install.sh -o /tmp/hermes-agent-install.sh
+          bash /tmp/hermes-agent-install.sh --commit 2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19 --channel main --non-interactive --skip-browser --skip-computer-use
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Hermes Agent plugin installation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          hermes plugins validate ./plugin-src --install-deps
+          hermes plugins doctor ./plugin-src --ci
+          echo "Hermes Agent and NaNLMind HERMES plugin admission: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: One bounded Gemma cloud request with repository secret OLLAMA
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          # Only this step receives OLLAMA. Never check it into Git.
+          OLLAMA: ${{ secrets.OLLAMA }}
+        run: |
+          set -euo pipefail
+          set +x
+          python scripts/ollama_gemma_smoke.py
+
+      - name: Automatic checks completed (cloud not invoked on push)
+        if: github.event_name != 'workflow_dispatch'
+        shell: bash
+        run: |
+          echo "Non-secret HERMES Linux integration test finished." >> "$GITHUB_STEP_SUMMARY"
+          echo "No Ollama credentials were injected and no cloud inference was made." >> "$GITHUB_STEP_SUMMARY"
