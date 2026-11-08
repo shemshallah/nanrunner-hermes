@@ -31,3 +31,5 @@ The credential-free `Publish pre-installed Hermes runtime (pinned)` workflow pac
 Every job now attempts **Actions cache → Release archive → pinned upstream bootstrap**. The bootstrap is for the first run before the release exists. The archive includes `~/.hermes` and `~/.local/bin/hermes`, excluding config, credentials, logs, history, and caches. Restored bytes must pass SHA-256 and pinned-commit/CLI checks. No `OLLAMA` secret is available during bundling or cache save. GitHub-hosted runners remain disposable; this restores an already-installed runtime instead of keeping a machine alive.
 
 To update Hermes, change the pinned commit, Release tag and cache key together, then rebuild a new immutable release.
+
+**Verified on GitHub Actions:** [fresh, uncached Release restore](https://github.com/shemshallah/nanrunner-hermes/actions/runs/42455579393) completed successfully in **19 seconds** (2026-11-07 Pacific). Subsequent admission runs should prefer the repository cache, with the Release as durable fallback.
