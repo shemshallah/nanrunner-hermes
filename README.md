@@ -33,3 +33,9 @@ Every job now attempts **Actions cache → Release archive → pinned upstream b
 To update Hermes, change the pinned commit, Release tag and cache key together, then rebuild a new immutable release.
 
 **Verified on GitHub Actions:** [fresh, uncached Release restore](https://github.com/shemshallah/nanrunner-hermes/actions/runs/42455579393) completed successfully in **19 seconds** (2026-11-07 Pacific). Subsequent admission runs should prefer the repository cache, with the Release as durable fallback.
+
+## Gemini-class model bridge: Hermes -> Gemma on Ollama Cloud
+
+The live session test invokes the **actual installed Hermes CLI** with `--provider ollama-cloud --model gemma4:31b` and the repository secret `OLLAMA` injected only into the cloud job as `OLLAMA_API_KEY`. The test opens a named Hermes session, supplies a random two-word phrase in turn one, **resumes the same session**, and asks Gemma to recall it in turn two without restating the phrase. It fails closed if there is no valid response, or if context is lost. The direct Ollama API smoke test also runs. This proves a Hermes-to-Gemma conversation, not just a direct REST call.
+
+Run manually from **Actions -> Test HERMES + Gemma (Ollama) -> Run workflow**. For a local conversation with an injected provider key, run `hermes chat --safe-mode --provider ollama-cloud --model gemma4:31b -c gemma-session --create-if-missing`, then `hermes chat --resume gemma-session`. GitHub-hosted jobs are ephemeral; session history is retained only within the job, not automatically shared between jobs or mapped into BS0:0. No model replies or provider diagnostics are written to public logs.
