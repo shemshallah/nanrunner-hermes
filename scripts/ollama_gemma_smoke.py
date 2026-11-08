@@ -16,7 +16,7 @@ import urllib.request
 
 
 URL = "https://ollama.com/api/chat"
-MODEL = "gemma4:31b-cloud"
+MODEL = "gemma4:31b"
 MAX_OUTPUT_TOKENS = 48
 MAX_RESPONSE_BYTES = 65536
 
@@ -105,7 +105,7 @@ def main() -> int:
     if summary:
         with open(summary, "a", encoding="utf-8") as stream:
             stream.write("### Ollama Gemma cloud: PASS\n\n")
-            stream.write("Authenticated single request to `gemma4:31b-cloud` succeeded.\n\n")
+            stream.write("Authenticated single request to `gemma4:31b` succeeded.\n\n")
             stream.write("This response **does not prove free-tier eligibility or credit balance**.\n")
     return 0
 

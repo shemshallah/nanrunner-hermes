@@ -75,20 +75,68 @@ jobs:
           hermes plugins doctor ./plugin-src --ci
           echo "Hermes Agent and NaNLMind HERMES plugin admission: PASS" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: One bounded Gemma cloud request with repository secret OLLAMA
-        if: github.event_name == 'workflow_dispatch'
+      - name: Admission checks completed without any cloud credential
+        shell: bash
+        run: |
+          echo "Plugin admission and real Hermes Agent install: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "This job never receives the Ollama secret." >> "$GITHUB_STEP_SUMMARY"
+
+  cloud-smoke:
+    name: Gemma cloud + Hermes one-shot (separate ephemeral runner)
+    # A single authorized push with the exact commit message below runs this
+    # one-time test; normal push CI and PRs NEVER read any cloud credential.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       github.event.head_commit.message == 'Run one-time Ollama secret integration test')
+    needs: nanrunner-hermes
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout dedicated test harness without retained Git credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Python for a bounded cloud test
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned Hermes Agent, without any provider secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/v0.23.0/scripts/install.sh -o /tmp/hermes-agent-install.sh
+          bash /tmp/hermes-agent-install.sh --commit 2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19 --channel main --non-interactive --skip-browser --skip-computer-use
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify one Ollama Gemma completion and one Hermes one-shot
         shell: bash
         env:
-          # Only this step receives OLLAMA. Never check it into Git.
           OLLAMA: ${{ secrets.OLLAMA }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA }}
         run: |
           set -euo pipefail
           set +x
+          if [[ -z "$OLLAMA" ]]; then
+            echo "ERROR: Actions repository secret OLLAMA is unavailable" >&2
+            exit 2
+          fi
+          # The direct smoke script suppresses provider error bodies and output.
           python scripts/ollama_gemma_smoke.py
-
-      - name: Automatic checks completed (cloud not invoked on push)
-        if: github.event_name != 'workflow_dispatch'
-        shell: bash
-        run: |
-          echo "Non-secret HERMES Linux integration test finished." >> "$GITHUB_STEP_SUMMARY"
-          echo "No Ollama credentials were injected and no cloud inference was made." >> "$GITHUB_STEP_SUMMARY"
+          # Actual Hermes Agent inference. Do not print its output, diagnostics,
+          # or credentials into hosted runner logs.
+          if timeout 180s hermes chat --oneshot --provider ollama-cloud --model gemma4:31b --safe-mode --max-turns 1 -q "Reply with exactly READY." >/tmp/hermes.out 2>/tmp/hermes.err; then
+            if [[ ! -s /tmp/hermes.out ]]; then
+              echo "ERROR: Hermes returned no visible response" >&2
+              exit 1
+            fi
+            echo "PASS: Hermes Agent one-shot completed via Ollama Cloud"
+            echo "### Hermes Agent via Ollama Cloud: PASS" >> "$GITHUB_STEP_SUMMARY"
+          else
+            rc=$?
+            echo "ERROR: Hermes one-shot failed (exit $rc); output withheld to avoid leaks" >&2
+            exit 1
+          fi
+          echo "The two bounded inferences do not prove zero-cost usage; inspect Ollama billing." >> "$GITHUB_STEP_SUMMARY"
